@@ -104,11 +104,15 @@ MGLCoordinateBounds MGLCoordinateIncludingCoordinate(MGLCoordinateBounds bounds,
 }
 
 - (void)addClusters:(NSArray<CKCluster *> *)clusters {
-    [self addAnnotations:clusters];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self addAnnotations:clusters];
+    });
 }
 
 - (void)removeClusters:(NSArray<CKCluster *> *)clusters {
-    [self removeAnnotations:clusters];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self removeAnnotations:clusters];
+    });
 }
 
 - (void)selectCluster:(CKCluster *)cluster animated:(BOOL)animated {
@@ -124,39 +128,43 @@ MGLCoordinateBounds MGLCoordinateIncludingCoordinate(MGLCoordinateBounds bounds,
 }
 
 - (void)performAnimations:(NSArray<CKClusterAnimation *> *)animations completion:(void (^__nullable)(BOOL finished))completion {
-    
-    for (CKClusterAnimation *animation in animations) {
-        animation.cluster.coordinate = animation.from;
-    }
-    
-    void (^animationsBlock)(void) = ^{};
-    
-    for (CKClusterAnimation *animation in animations) {
-        animationsBlock = ^{
-            animationsBlock();
-            animation.cluster.coordinate = animation.to;
-        };
-    }
-    
-    if ([self.clusterManager.delegate respondsToSelector:@selector(clusterManager:performCustomAnimations:completion:)]) {
-        [self.clusterManager.delegate clusterManager:self.clusterManager
-                             performCustomAnimations:animations
-                                          completion:^(BOOL finished) {
-                                              if (completion) completion(finished);
-                                          }];
-    } else if ([self.clusterManager.delegate respondsToSelector:@selector(clusterManager:performAnimations:completion:)]) {
-        [self.clusterManager.delegate clusterManager:self.clusterManager
-                                   performAnimations:animationsBlock
-                                          completion:^(BOOL finished) {
-                                              if (completion) completion(finished);
-                                          }];
-    } else {
-        [UIView animateWithDuration:self.clusterManager.animationDuration
-                              delay:0
-                            options:self.clusterManager.animationOptions
-                         animations:animationsBlock
-                         completion:completion];
-    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        
+        for (CKClusterAnimation *animation in animations) {
+            animation.cluster.coordinate = animation.from;
+        }
+        
+        if ([self.clusterManager.delegate respondsToSelector:@selector(clusterManager:performCustomAnimations:completion:)]) {
+            [self.clusterManager.delegate clusterManager:self.clusterManager
+                                 performCustomAnimations:animations
+                                              completion:^(BOOL finished) {
+                                                  if (completion) completion(finished);
+                                              }];
+        } else {
+            void (^animationsBlock)(void) = ^{};
+            
+            for (CKClusterAnimation *animation in animations) {
+                animationsBlock = ^{
+                    animationsBlock();
+                    animation.cluster.coordinate = animation.to;
+                };
+            }
+            
+            if ([self.clusterManager.delegate respondsToSelector:@selector(clusterManager:performAnimations:completion:)]) {
+                [self.clusterManager.delegate clusterManager:self.clusterManager
+                                           performAnimations:animationsBlock
+                                                  completion:^(BOOL finished) {
+                                                      if (completion) completion(finished);
+                                                  }];
+            } else {
+                [UIView animateWithDuration:self.clusterManager.animationDuration
+                                      delay:0
+                                    options:self.clusterManager.animationOptions
+                                 animations:animationsBlock
+                                 completion:completion];
+            }
+        }
+    });
 }
 
 @end

@@ -65,29 +65,33 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
 - (void)updateClustersIfNeeded {
     if (!self.map) return;
     
+    double zoom = self.map.zoom;
     MKMapRect visibleMapRect = self.map.visibleMapRect;
     
-    // Zoom update
-    if (fabs(self.visibleMapRect.size.width - visibleMapRect.size.width) > 0.1f) {
-        [self updateMapRect:visibleMapRect animated:(self.animationDuration > 0)];
-        
-    } else if (self.marginFactor != kCKMarginFactorWorld) {
-        
-        // Translation update
-        if (fabs(self.visibleMapRect.origin.x - visibleMapRect.origin.x) > self.visibleMapRect.size.width * self.marginFactor / 2 ||
-            fabs(self.visibleMapRect.origin.y - visibleMapRect.origin.y) > self.visibleMapRect.size.height* self.marginFactor / 2 ) {
-            [self updateMapRect:visibleMapRect animated:NO];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+        // Zoom update
+        if (fabs(self.visibleMapRect.size.width - visibleMapRect.size.width) > 0.1f) {
+            [self updateMapRect:visibleMapRect zoom:zoom animated:(self.animationDuration > 0)];
+        } else if (self.marginFactor != kCKMarginFactorWorld) {
+            // Translation update
+            if (fabs(self.visibleMapRect.origin.x - visibleMapRect.origin.x) > self.visibleMapRect.size.width * self.marginFactor / 2 ||
+                fabs(self.visibleMapRect.origin.y - visibleMapRect.origin.y) > self.visibleMapRect.size.height* self.marginFactor / 2 ) {
+                [self updateMapRect:visibleMapRect zoom:zoom animated:NO];
+            }
         }
-    }
+    });
 }
 
 - (void)updateClusters {
     if (!self.map) return;
     
+    double zoom = self.map.zoom;
     MKMapRect visibleMapRect = self.map.visibleMapRect;
     
-    BOOL animated = (self.animationDuration > 0) && fabs(self.visibleMapRect.size.width - visibleMapRect.size.width) > 0.1f;
-    [self updateMapRect:visibleMapRect animated:animated];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+        BOOL animated = (self.animationDuration > 0) && fabs(self.visibleMapRect.size.width - visibleMapRect.size.width) > 0.1f;
+        [self updateMapRect:visibleMapRect zoom:zoom animated:animated];
+    });
 }
 
 - (NSArray<CKCluster *> *)clusters {
@@ -159,7 +163,7 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
 
 #pragma mark - Private
 
-- (void)updateMapRect:(MKMapRect)visibleMapRect animated:(BOOL)animated {
+- (void)updateMapRect:(MKMapRect)visibleMapRect zoom:(double)zoom animated:(BOOL)animated {
     if (!self.tree || MKMapRectIsNull(visibleMapRect) || MKMapRectIsEmpty(visibleMapRect)) {
         return;
     }
@@ -171,7 +175,6 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
                                         -self.marginFactor * visibleMapRect.size.height);
     }
     
-    double zoom = self.map.zoom;
     CKClusterAlgorithm *algorithm = (zoom < self.maxZoomLevel)? self.algorithm : [CKClusterAlgorithm new];
     NSArray *clusters = [algorithm clustersInRect:clusterMapRect zoom:zoom tree:self.tree];
     
