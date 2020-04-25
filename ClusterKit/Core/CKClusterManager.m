@@ -35,10 +35,11 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
 @property (nonatomic,strong) id<CKAnnotationTree> tree;
 @property (nonatomic,strong) CKCluster *selectedCluster;
 @property (nonatomic) MKMapRect visibleMapRect;
+@property (atomic, strong) NSMutableSet<CKCluster *> *_clusters;
+
 @end
 
 @implementation CKClusterManager {
-    NSMutableSet<CKCluster *> *_clusters;
     dispatch_queue_t _queue;
 }
 
@@ -50,9 +51,10 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
         self.marginFactor = kCKMarginFactorWorld;
         self.animationDuration = .5;
         self.animationOptions = UIViewAnimationOptionCurveEaseOut;
-        _clusters = [NSMutableSet set];
+        self._clusters = [NSMutableSet set];
         
-        _queue = dispatch_queue_create("com.hulab.cluster", DISPATCH_QUEUE_CONCURRENT);
+        dispatch_queue_attr_t attributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_BACKGROUND, 0);
+        _queue = dispatch_queue_create("com.hulab.cluster", attributes);
     }
     return self;
 }
@@ -68,7 +70,7 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
     double zoom = self.map.zoom;
     MKMapRect visibleMapRect = self.map.visibleMapRect;
     
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+    dispatch_async(_queue, ^{
         // Zoom update
         if (fabs(self.visibleMapRect.size.width - visibleMapRect.size.width) > 0.1f) {
             [self updateMapRect:visibleMapRect zoom:zoom animated:(self.animationDuration > 0)];
@@ -88,7 +90,7 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
     double zoom = self.map.zoom;
     MKMapRect visibleMapRect = self.map.visibleMapRect;
     
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+    dispatch_async(_queue, ^{
         BOOL animated = (self.animationDuration > 0) && fabs(self.visibleMapRect.size.width - visibleMapRect.size.width) > 0.1f;
         [self updateMapRect:visibleMapRect zoom:zoom animated:animated];
     });
@@ -96,9 +98,9 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
 
 - (NSArray<CKCluster *> *)clusters {
     if (self.selectedCluster) {
-        return [_clusters setByAddingObject:self.selectedCluster].allObjects;
+        return [self._clusters setByAddingObject:self.selectedCluster].allObjects;
     }
-    return _clusters.allObjects;
+    return self._clusters.allObjects;
 }
 
 #pragma mark Manage Annotations
@@ -179,10 +181,10 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
     NSArray *clusters = [algorithm clustersInRect:clusterMapRect zoom:zoom tree:self.tree];
     
     NSMutableSet *newClusters = [NSMutableSet setWithArray:clusters];
-    NSMutableSet *oldClusters = [NSMutableSet setWithSet:_clusters];
+    NSMutableSet *oldClusters = [NSMutableSet setWithSet:self._clusters];
     
     [oldClusters minusSet:newClusters];
-    [newClusters minusSet:_clusters];
+    [newClusters minusSet:self._clusters];
     
     NSComparisonResult zoomOrder = MKMapSizeCompare(_visibleMapRect.size, visibleMapRect.size);
     _visibleMapRect = visibleMapRect;
@@ -202,8 +204,8 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
             break;
     }
     
-    [_clusters minusSet:oldClusters];
-    [_clusters unionSet:newClusters];
+    [self._clusters minusSet:oldClusters];
+    [self._clusters unionSet:newClusters];
 }
 
 - (void)setSelectedCluster:(CKCluster *)selectedCluster animated:(BOOL)animated {
@@ -213,12 +215,12 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
     self.selectedCluster = selectedCluster;
     
     if (prev) {
-        [_clusters addObject:prev];
+        [self._clusters addObject:prev];
         [self.map deselectCluster:prev animated:animated];
     }
     
     if (selectedCluster) {
-        [_clusters removeObject:selectedCluster];
+        [self._clusters removeObject:selectedCluster];
         [self.map selectCluster:selectedCluster animated:animated];
     }
 }
@@ -228,7 +230,7 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
         return self.selectedCluster;
     }
     
-    for (CKCluster *cluster in _clusters) {
+    for (CKCluster *cluster in self._clusters) {
         if ([cluster containsAnnotation:annotation]) {
             return cluster;
         }
