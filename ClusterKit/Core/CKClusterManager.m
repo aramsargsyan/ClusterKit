@@ -53,7 +53,7 @@ BOOL CLLocationCoordinateEqual(CLLocationCoordinate2D coordinate1, CLLocationCoo
         self.animationOptions = UIViewAnimationOptionCurveEaseOut;
         self._clusters = [NSMutableSet set];
         
-        dispatch_queue_attr_t attributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_BACKGROUND, 0);
+        dispatch_queue_attr_t attributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_BACKGROUND, 0);
         _queue = dispatch_queue_create("com.hulab.cluster", attributes);
     }
     return self;
